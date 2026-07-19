@@ -5,6 +5,7 @@ import com.example.cachefallback.cache.LocalPropertyCache;
 import com.example.cachefallback.cache.RedisPropertyCache;
 import com.example.cachefallback.domain.PropertyData;
 import com.example.cachefallback.repository.PropertyRepository;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -32,7 +33,15 @@ public class PropertyService {
         yield hit.value();
       }
       case CacheResult.Miss<PropertyData> _ -> loadOnRedisMiss(id);
-      case CacheResult.Error<PropertyData> _ -> fetchFromDb(id);
+      case CacheResult.Error<PropertyData> _ -> {
+        Optional<PropertyData> local = localPropertyCache.get(id);
+        if (local.isPresent()) {
+          yield local.get();
+        }
+        PropertyData data = fetchFromDb(id);
+        localPropertyCache.put(id, data);
+        yield data;
+      }
     };
   }
 

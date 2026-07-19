@@ -5,6 +5,7 @@ import com.example.cachefallback.repository.PropertyRepository;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.io.IOException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,11 @@ class RedisCircuitBreakerFailureTest {
 
     @Autowired
     private CircuitBreakerRegistry circuitBreakerRegistry;
+
+    @BeforeEach
+    void cleanPropertyData() {
+        propertyRepository.deleteAll();
+    }
 
     @Test
     void redisOutage_opensCircuit_thenRecoversThroughHalfOpen() throws Exception {

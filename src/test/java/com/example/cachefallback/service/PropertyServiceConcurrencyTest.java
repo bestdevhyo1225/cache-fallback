@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,6 +45,11 @@ class PropertyServiceConcurrencyTest {
 
     @Autowired
     private RedisDistributedLock distributedLock;
+
+    @BeforeEach
+    void cleanPropertyData() {
+        propertyRepository.deleteAll();
+    }
 
     @Test
     void sameKey100ConcurrentRequests_hitsDbOnlyOnce() throws InterruptedException {

@@ -6,6 +6,7 @@ import com.example.cachefallback.cache.RedisPropertyCache;
 import com.example.cachefallback.domain.PropertyData;
 import com.example.cachefallback.lock.RedisDistributedLock;
 import com.example.cachefallback.repository.PropertyRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,6 +46,11 @@ class PropertyServiceLockContentionTest {
 
     private static String lockKeyFor(Long id) {
         return "property:" + id;
+    }
+
+    @BeforeEach
+    void cleanPropertyData() {
+        propertyRepository.deleteAll();
     }
 
     @Test

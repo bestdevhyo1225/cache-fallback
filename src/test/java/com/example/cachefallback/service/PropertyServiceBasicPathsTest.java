@@ -8,6 +8,7 @@ import com.example.cachefallback.repository.PropertyRepository;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,6 +39,11 @@ class PropertyServiceBasicPathsTest {
 
     @Autowired
     private RedisTemplate<String, PropertyData> redisTemplate;
+
+    @BeforeEach
+    void cleanPropertyData() {
+        propertyRepository.deleteAll();
+    }
 
     @Test
     void redisHit_returnsRedisValueAndWarmsLocal() {

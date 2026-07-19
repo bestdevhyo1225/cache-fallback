@@ -9,6 +9,7 @@ import com.example.cachefallback.repository.PropertyRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -39,6 +40,9 @@ class PropertyServiceLockContentionTest {
     @Autowired
     private RedisDistributedLock distributedLock;
 
+    @Autowired
+    private RedisTemplate<String, PropertyData> redisTemplate;
+
     private static String lockKeyFor(Long id) {
         return "property:" + id;
     }
@@ -47,6 +51,7 @@ class PropertyServiceLockContentionTest {
     void lockContentionWithLocalHit_returnsStaleValueWithoutTouchingDb() {
         PropertyData saved = propertyRepository.save(new PropertyData("실제-DB-값", 1_000L));
         Long id = saved.getId();
+        redisTemplate.delete("property:" + id);
         PropertyData stale = new PropertyData("오래된-Local-값", 1L);
         localPropertyCache.put(id, stale);
 
@@ -66,6 +71,7 @@ class PropertyServiceLockContentionTest {
     void lockContentionWithLocalMiss_pollsRedisAndPicksUpOtherLoaderResult() throws Exception {
         PropertyData saved = propertyRepository.save(new PropertyData("실제-DB-값", 2_000L));
         Long id = saved.getId();
+        redisTemplate.delete("property:" + id);
         PropertyData filledByOtherLoader = new PropertyData("다른-인스턴스가-채운-값", 2L);
 
         Optional<String> token = distributedLock.tryLock(lockKeyFor(id), Duration.ofSeconds(5));
@@ -91,6 +97,7 @@ class PropertyServiceLockContentionTest {
     void lockContentionRetriesExhausted_fallsBackToDbWithoutPopulatingRedis() {
         PropertyData saved = propertyRepository.save(new PropertyData("재시도-소진-후-DB-값", 3_000L));
         Long id = saved.getId();
+        redisTemplate.delete("property:" + id);
 
         Optional<String> token = distributedLock.tryLock(lockKeyFor(id), Duration.ofSeconds(5));
         assertTrue(token.isPresent(), "재시도 창(500ms)이 다 지나도록 락을 계속 붙잡아 둔다");

@@ -66,4 +66,6 @@ Redis Error/Timeout/Circuit Open
   - 락 획득→DB조회→Redis set→Local put→unlock 로직을 `attemptLockedLoad`로 추출해 최초 시도와 대기 루프 재시도가 공유
   - `waitForOtherLoaderOrFallback`이 매 폴링마다 Redis 값 확인 + 직접 락 재획득 시도를 함께 반복 → 홀더가 살아있는 동안엔 인스턴스 수와 무관하게 DB가 1번만 조회되고, 홀더가 진짜 죽어 TTL이 만료된 경우에만 최종 DB 폴백
   - 트레이드오프: 최악의 지연이 500ms→~2.8초로 늘어남. Pub/Sub 기반 이벤트 알림(폴링 제거)은 논의만 하고 별도 개선안으로 보류
+- **docker-compose 도입.** 수동 `docker run`으로 띄우던 `redis-cache-fallback`을 `docker-compose.yml`로 옮기고, `mysql-cache-fallback`(호스트 포트 3307) 서비스도 함께 정의. 호스트에 이미 네이티브 MySQL(3306)과 다른 프로젝트용 `mysql` 컨테이너(43306)가 떠 있어서 포트/이름 충돌을 피해 3307, `mysql-cache-fallback`으로 구분.
+- **H2 → 실제 MySQL로 전환.** `build.gradle`에서 `spring-boot-h2console`/`com.h2database:h2`를 제거하고 `com.mysql:mysql-connector-j` 추가. `application.yml`의 datasource를 `jdbc:mysql://localhost:3307/cachefallback`(`root`/`cachefallback`)로 교체, `h2.console` 설정 제거. `ddl-auto: update`가 그대로 스키마를 자동 생성해줘서 별도 마이그레이션 없이 전환 완료, 전체 테스트 통과 확인. H2는 in-memory라 매 JVM마다 초기화됐지만 MySQL은 볼륨에 데이터가 남아있어 테스트를 반복 실행하면 `property_data`에 행이 계속 누적됨 (정리 로직은 없음, 학습 프로젝트라 허용).
 - 다음 실제 구현 착수 지점 없음 — 10단계 계획 전체 완료. 이후 방향은 다음 세션에서 새로 정함.

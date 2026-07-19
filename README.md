@@ -26,13 +26,13 @@ Redis 호출에는 [Resilience4j](https://resilience4j.readme.io/) `@CircuitBrea
 ## 요구 사항
 
 - Java 25
-- 로컬 Redis (기본 포트 6379) — `docker-compose.yml`로 관리
+- 로컬 Redis + MySQL — `docker-compose.yml`로 관리
 
 ```bash
 docker compose up -d
 ```
 
-`redis-cache-fallback`(6379) 컨테이너가 뜹니다. `mysql-cache-fallback`(호스트 포트 3307)도 같이 뜨지만, 지금은 애플리케이션이 아직 H2(in-memory)를 쓰고 있어서 실제로 연결돼 있진 않습니다 — 나중에 H2를 실제 DB로 바꿔볼 때를 대비해 미리 띄워둔 것입니다.
+`redis-cache-fallback`(6379), `mysql-cache-fallback`(호스트 포트 3307, DB `cachefallback`, `root`/`cachefallback`) 두 컨테이너가 뜹니다. JPA `ddl-auto: update`가 스키마를 자동 생성하므로 별도 마이그레이션은 필요 없습니다. MySQL은 컨테이너 재시작과 무관하게 데이터가 볼륨에 남아있으니(H2 in-memory와 달리), 테스트를 반복 실행하면 `property_data` 테이블에 행이 계속 누적됩니다 — 학습 프로젝트라 별도 정리는 하지 않고 있습니다.
 
 ## 실행
 

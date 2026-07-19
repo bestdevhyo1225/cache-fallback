@@ -2,8 +2,10 @@ spring:
   application:
     name: cache-fallback
   datasource:
-    url: jdbc:h2:mem:cachefallback
-    driver-class-name: org.h2.Driver
+    url: jdbc:mysql://localhost:3307/cachefallback
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: cachefallback
   jpa:
     hibernate:
       ddl-auto: update
@@ -12,9 +14,6 @@ spring:
     redis:
       host: localhost
       port: 6379
-  h2:
-    console:
-      enabled: true
 
 resilience4j:
   circuitbreaker:

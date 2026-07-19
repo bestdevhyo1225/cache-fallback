@@ -131,6 +131,6 @@ public class PropertyService {
 
   private PropertyData fetchFromDb(Long id) {
     return propertyRepository.findById(id)
-        .orElseThrow(() -> new IllegalArgumentException("PropertyData not found: " + id));
+        .orElseThrow(() -> new PropertyNotFoundException(id));
   }
 }

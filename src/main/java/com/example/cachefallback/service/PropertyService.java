@@ -31,9 +31,16 @@ public class PropertyService {
         localPropertyCache.put(id, hit.value());
         yield hit.value();
       }
-      case CacheResult.Miss<PropertyData> _ -> fetchFromDb(id);
+      case CacheResult.Miss<PropertyData> _ -> loadOnRedisMiss(id);
       case CacheResult.Error<PropertyData> _ -> fetchFromDb(id);
     };
+  }
+
+  private PropertyData loadOnRedisMiss(Long id) {
+    PropertyData data = fetchFromDb(id);
+    redisPropertyCache.put(id, data);
+    localPropertyCache.put(id, data);
+    return data;
   }
 
   private PropertyData fetchFromDb(Long id) {

@@ -1,6 +1,7 @@
 package com.example.cachefallback.cache;
 
 import com.example.cachefallback.domain.PropertyData;
+import java.time.Duration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 public class RedisPropertyCache {
 
   private static final String KEY_PREFIX = "property:";
+  private static final Duration TTL = Duration.ofMinutes(5);
 
   private final RedisTemplate<String, PropertyData> redisTemplate;
 
@@ -25,5 +27,9 @@ public class RedisPropertyCache {
     } catch (Exception e) {
       return new CacheResult.Error<>(e);
     }
+  }
+
+  public void put(Long id, PropertyData data) {
+    redisTemplate.opsForValue().set(KEY_PREFIX + id, data, TTL);
   }
 }

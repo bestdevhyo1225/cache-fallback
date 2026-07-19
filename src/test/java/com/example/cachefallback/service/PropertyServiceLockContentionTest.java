@@ -7,6 +7,7 @@ import com.example.cachefallback.domain.PropertyData;
 import com.example.cachefallback.lock.RedisDistributedLock;
 import com.example.cachefallback.repository.PropertyRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
+@DisplayName("분산락 경합 중 stale 응답 검증")
 class PropertyServiceLockContentionTest {
 
     @Autowired
@@ -54,6 +56,7 @@ class PropertyServiceLockContentionTest {
     }
 
     @Test
+    @DisplayName("락 경합 + Local hit -> DB를 건드리지 않고 stale 값을 즉시 반환한다")
     void lockContentionWithLocalHit_returnsStaleValueWithoutTouchingDb() {
         PropertyData saved = propertyRepository.save(new PropertyData("실제-DB-값", 1_000L));
         Long id = saved.getId();
@@ -74,6 +77,7 @@ class PropertyServiceLockContentionTest {
     }
 
     @Test
+    @DisplayName("락 경합 + Local miss -> 다른 로더가 채운 Redis 값을 폴링으로 잡아챈다")
     void lockContentionWithLocalMiss_pollsRedisAndPicksUpOtherLoaderResult() throws Exception {
         PropertyData saved = propertyRepository.save(new PropertyData("실제-DB-값", 2_000L));
         Long id = saved.getId();
@@ -83,8 +87,7 @@ class PropertyServiceLockContentionTest {
         Optional<String> token = distributedLock.tryLock(lockKeyFor(id), Duration.ofSeconds(5));
         assertTrue(token.isPresent());
 
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        try {
+        try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor()) {
             scheduler.schedule(() -> {
                 redisPropertyCache.put(id, filledByOtherLoader);
                 distributedLock.unlock(lockKeyFor(id), token.get());
@@ -94,12 +97,11 @@ class PropertyServiceLockContentionTest {
 
             assertEquals(filledByOtherLoader.getName(), result.getName());
             assertNotEquals(saved.getName(), result.getName());
-        } finally {
-            scheduler.shutdown();
         }
     }
 
     @Test
+    @DisplayName("락 경합 + 대기 예산 소진 -> DB로 폴백하되 Redis는 채우지 않는다")
     void lockContentionRetriesExhausted_fallsBackToDbWithoutPopulatingRedis() {
         PropertyData saved = propertyRepository.save(new PropertyData("재시도-소진-후-DB-값", 3_000L));
         Long id = saved.getId();

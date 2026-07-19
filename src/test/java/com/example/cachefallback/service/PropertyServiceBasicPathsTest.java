@@ -9,6 +9,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
+@DisplayName("PropertyService 기본 4분기 (Hit/Miss/Error x Local hit/miss)")
 class PropertyServiceBasicPathsTest {
 
     @Autowired
@@ -46,6 +48,7 @@ class PropertyServiceBasicPathsTest {
     }
 
     @Test
+    @DisplayName("Redis Hit -> Redis 값을 반환하고 Local을 채운다")
     void redisHit_returnsRedisValueAndWarmsLocal() {
         circuitBreakerRegistry.circuitBreaker("redisCache").reset();
         PropertyData saved = propertyRepository.save(new PropertyData("DB-값", 100L));
@@ -61,6 +64,7 @@ class PropertyServiceBasicPathsTest {
     }
 
     @Test
+    @DisplayName("Redis Miss(경합 없음) -> DB 조회 후 Redis/Local을 채운다")
     void redisMissWithoutContention_fetchesDbAndPopulatesRedisAndLocal() {
         circuitBreakerRegistry.circuitBreaker("redisCache").reset();
         PropertyData saved = propertyRepository.save(new PropertyData("DB-only-값", 300L));
@@ -77,6 +81,7 @@ class PropertyServiceBasicPathsTest {
     }
 
     @Test
+    @DisplayName("Redis Error + Local hit -> DB를 안 건드리고 stale 값을 즉시 반환한다")
     void redisError_withLocalHit_returnsStaleWithoutTouchingDb() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("redisCache");
         PropertyData saved = propertyRepository.save(new PropertyData("실제-DB-값", 400L));
@@ -96,6 +101,7 @@ class PropertyServiceBasicPathsTest {
     }
 
     @Test
+    @DisplayName("Redis Error + Local miss -> DB로 폴백하고 Redis는 건드리지 않는다")
     void redisError_withLocalMiss_fetchesDbAndPopulatesLocalOnlyNotRedis() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("redisCache");
         PropertyData saved = propertyRepository.save(new PropertyData("Error-경로-DB-값", 500L));

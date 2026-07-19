@@ -6,6 +6,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.io.IOException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 @SpringBootTest
+@DisplayName("Redis 장애에 따른 Circuit Breaker 상태 전이")
 class RedisCircuitBreakerFailureTest {
 
     private static final String CONTAINER_NAME = "redis-cache-fallback";
@@ -33,6 +35,7 @@ class RedisCircuitBreakerFailureTest {
     }
 
     @Test
+    @DisplayName("Redis 장애 -> Open 전이 -> 즉시 fallback -> Half-open 시험 통과 -> Closed 복귀")
     void redisOutage_opensCircuit_thenRecoversThroughHalfOpen() throws Exception {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("redisCache");
         circuitBreaker.reset();

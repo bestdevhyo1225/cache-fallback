@@ -32,7 +32,7 @@ Redis 호출에는 [Resilience4j](https://resilience4j.readme.io/) `@CircuitBrea
 docker compose up -d
 ```
 
-`redis-cache-fallback`(6379), `mysql-cache-fallback`(호스트 포트 3307, DB `cachefallback`, `root`/`cachefallback`) 두 컨테이너가 뜹니다. JPA `ddl-auto: update`가 스키마를 자동 생성하므로 별도 마이그레이션은 필요 없습니다. MySQL은 컨테이너 재시작과 무관하게 데이터가 볼륨에 남아있으니(H2 in-memory와 달리), 테스트를 반복 실행하면 `property_data` 테이블에 행이 계속 누적됩니다 — 학습 프로젝트라 별도 정리는 하지 않고 있습니다.
+`redis-cache-fallback`(6379), `mysql-cache-fallback`(호스트 포트 3307, DB `cachefallback`, `root`/`cachefallback`) 두 컨테이너가 뜹니다. JPA `ddl-auto: update`가 스키마를 자동 생성하므로 별도 마이그레이션은 필요 없습니다. MySQL은 H2 in-memory와 달리 컨테이너 재시작과 무관하게 데이터가 볼륨에 남으므로, 데이터를 만드는 테스트 클래스마다 `@BeforeEach`에서 `propertyRepository.deleteAll()`로 정리합니다 (auto-increment 카운터는 유지 — TRUNCATE를 쓰면 id가 1부터 재시작해 leftover Redis 값과 충돌하는 flaky 버그가 재발하기 때문).
 
 ## 실행
 

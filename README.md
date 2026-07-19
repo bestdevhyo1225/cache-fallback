@@ -26,11 +26,13 @@ Redis 호출에는 [Resilience4j](https://resilience4j.readme.io/) `@CircuitBrea
 ## 요구 사항
 
 - Java 25
-- 로컬 Redis (기본 포트 6379)
+- 로컬 Redis (기본 포트 6379) — `docker-compose.yml`로 관리
 
 ```bash
-docker run -d --name redis-cache-fallback -p 6379:6379 redis:7
+docker compose up -d
 ```
+
+`redis-cache-fallback`(6379) 컨테이너가 뜹니다. `mysql-cache-fallback`(호스트 포트 3307)도 같이 뜨지만, 지금은 애플리케이션이 아직 H2(in-memory)를 쓰고 있어서 실제로 연결돼 있진 않습니다 — 나중에 H2를 실제 DB로 바꿔볼 때를 대비해 미리 띄워둔 것입니다.
 
 ## 실행
 

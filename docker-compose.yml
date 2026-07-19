@@ -1,0 +1,20 @@
+services:
+  redis:
+    image: redis:7
+    container_name: redis-cache-fallback
+    ports:
+      - "6379:6379"
+
+  mysql:
+    image: mysql:8
+    container_name: mysql-cache-fallback
+    environment:
+      MYSQL_ROOT_PASSWORD: cachefallback
+      MYSQL_DATABASE: cachefallback
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:

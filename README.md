@@ -44,11 +44,14 @@ docker compose up -d
 
 ## 테스트
 
-일부 통합 테스트는 위 Redis 컨테이너가 떠 있어야 하고, 그중 일부(`RedisCircuitBreakerFailureTest`)는 `docker stop/start`로 컨테이너를 직접 제어합니다. `PropertyControllerAcceptanceTest`는 `MockMvc`로 실제 `GET /properties/{id}`를 호출해서 Hit/Miss/락 경합/Circuit Open/404/400까지 블랙박스로 검증하는 인수 테스트입니다.
+**테스트를 실행하기 전에 반드시 `docker compose up -d`로 Redis/MySQL을 먼저 띄워야 합니다.** 모든 테스트가 `@SpringBootTest`로 실제 스프링 컨텍스트를 띄우는데, datasource가 H2가 아니라 실제 MySQL이라 컨테이너가 없으면 컨텍스트 로딩 자체가 실패합니다 (가장 사소한 `CacheFallbackApplicationTests.contextLoads()`조차 실패함). 그중 일부(`RedisCircuitBreakerFailureTest`)는 `docker stop/start`로 `redis-cache-fallback` 컨테이너를 직접 제어하므로, 컨테이너 이름이 바뀌면 그 테스트도 깨집니다.
 
 ```bash
+docker compose up -d   # 먼저!
 ./gradlew test
 ```
+
+`PropertyControllerAcceptanceTest`는 `MockMvc`로 실제 `GET /properties/{id}`를 호출해서 Hit/Miss/락 경합/Circuit Open/404/400까지 블랙박스로 검증하는 인수 테스트입니다.
 
 ## 구현 단계
 

@@ -6,6 +6,8 @@ import com.example.cachefallback.cache.RedisPropertyCache;
 import com.example.cachefallback.domain.PropertyData;
 import com.example.cachefallback.repository.PropertyRepository;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -14,6 +16,7 @@ public class PropertyService {
   private final PropertyRepository propertyRepository;
   private final RedisPropertyCache redisPropertyCache;
   private final LocalPropertyCache localPropertyCache;
+  private final ConcurrentHashMap<Long, CompletableFuture<PropertyData>> dbLoadFutures = new ConcurrentHashMap<>();
 
   public PropertyService(
       PropertyRepository propertyRepository,
@@ -38,7 +41,7 @@ public class PropertyService {
         if (local.isPresent()) {
           yield local.get();
         }
-        PropertyData data = fetchFromDb(id);
+        PropertyData data = fetchFromDbSingleFlight(id);
         localPropertyCache.put(id, data);
         yield data;
       }
@@ -46,10 +49,20 @@ public class PropertyService {
   }
 
   private PropertyData loadOnRedisMiss(Long id) {
-    PropertyData data = fetchFromDb(id);
+    PropertyData data = fetchFromDbSingleFlight(id);
     redisPropertyCache.put(id, data);
     localPropertyCache.put(id, data);
     return data;
+  }
+
+  private PropertyData fetchFromDbSingleFlight(Long id) {
+    CompletableFuture<PropertyData> future = dbLoadFutures.computeIfAbsent(id, this::startDbLoad);
+    return future.join();
+  }
+
+  private CompletableFuture<PropertyData> startDbLoad(Long id) {
+    CompletableFuture<PropertyData> future = CompletableFuture.supplyAsync(() -> fetchFromDb(id));
+    return future.whenComplete((_, _) -> dbLoadFutures.remove(id, future));
   }
 
   private PropertyData fetchFromDb(Long id) {

@@ -16,8 +16,8 @@ import org.springframework.stereotype.Service;
 public class PropertyService {
 
   private static final Duration LOCK_TTL = Duration.ofSeconds(3);
-  private static final int LOCK_WAIT_MAX_RETRIES = 5;
   private static final Duration LOCK_WAIT_RETRY_INTERVAL = Duration.ofMillis(100);
+  private static final Duration LOCK_WAIT_BUDGET = LOCK_TTL.minus(LOCK_WAIT_RETRY_INTERVAL.multipliedBy(2));
 
   private final PropertyRepository propertyRepository;
   private final RedisPropertyCache redisPropertyCache;
@@ -58,18 +58,23 @@ public class PropertyService {
   }
 
   private PropertyData loadOnRedisMiss(Long id) {
+    Optional<PropertyData> loaded = attemptLockedLoad(id);
+    return loaded.orElseGet(() -> waitForOtherLoaderOrFallback(id));
+  }
+
+  private Optional<PropertyData> attemptLockedLoad(Long id) {
     Optional<String> token = distributedLock.tryLock(lockKey(id), LOCK_TTL);
-    if (token.isPresent()) {
-      try {
-        PropertyData data = fetchFromDbSingleFlight(id);
-        redisPropertyCache.put(id, data);
-        localPropertyCache.put(id, data);
-        return data;
-      } finally {
-        distributedLock.unlock(lockKey(id), token.get());
-      }
+    if (token.isEmpty()) {
+      return Optional.empty();
     }
-    return waitForOtherLoaderOrFallback(id);
+    try {
+      PropertyData data = fetchFromDbSingleFlight(id);
+      redisPropertyCache.put(id, data);
+      localPropertyCache.put(id, data);
+      return Optional.of(data);
+    } finally {
+      distributedLock.unlock(lockKey(id), token.get());
+    }
   }
 
   private PropertyData waitForOtherLoaderOrFallback(Long id) {
@@ -77,8 +82,11 @@ public class PropertyService {
     if (local.isPresent()) {
       return local.get();
     }
-    for (int i = 0; i < LOCK_WAIT_MAX_RETRIES; i++) {
+
+    long deadline = System.nanoTime() + LOCK_WAIT_BUDGET.toNanos();
+    while (System.nanoTime() < deadline) {
       sleep();
+
       CacheResult<PropertyData> retry = redisPropertyCache.get(id);
       switch (retry) {
         case CacheResult.Hit<PropertyData> hit -> {
@@ -88,6 +96,11 @@ public class PropertyService {
         case CacheResult.Miss<PropertyData> _,
              CacheResult.Error<PropertyData> _ -> {
         }
+      }
+
+      Optional<PropertyData> loaded = attemptLockedLoad(id);
+      if (loaded.isPresent()) {
+        return loaded.get();
       }
     }
     return fetchFromDbSingleFlight(id);

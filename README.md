@@ -65,4 +65,6 @@ docker run -d --name redis-cache-fallback -p 6379:6379 redis:7
 
 ## 알려진 한계
 
-`waitForOtherLoaderOrFallback`의 재시도 창(5회×100ms=500ms)이 락 TTL(3초)보다 짧고, DB 조회 single-flight가 인스턴스 로컬이라 인스턴스가 여러 대일 때 크로스 인스턴스 방어가 안 됩니다. 락 홀더가 느릴 때 대기 스레드들이 재시도를 소진하고 각자 폴백하면 인스턴스 수만큼 DB 동시 조회가 날 수 있습니다 (`PropertyServiceLockContentionTest`에서 실측 재현됨). 수치 튜닝은 아직 미해결로 남아 있습니다.
+DB 조회 single-flight(`fetchFromDbSingleFlight`)가 인스턴스 로컬이라, 인스턴스가 여러 대일 때 크로스 인스턴스 방어는 안 됩니다. 다만 `waitForOtherLoaderOrFallback`이 락 TTL에서 유도한 예산(`LOCK_WAIT_BUDGET`, TTL−200ms)만큼 Redis 확인과 락 재획득을 함께 반복하도록 개선되어서, 락 홀더가 살아있는 동안(정상적으로 느리기만 한 경우)엔 인스턴스 수와 무관하게 DB가 1번만 조회됩니다. 크로스 인스턴스 중복 조회는 홀더가 실제로 죽어 TTL이 만료된 경우에만 발생하고, 그마저도 락 재획득 경쟁에서 이긴 하나의 스레드만 DB를 탑니다.
+
+트레이드오프는 지연 시간입니다 — 최악의 경우 응답이 500ms가 아니라 락 TTL 근처(~2.8초)까지 걸릴 수 있습니다. 폴링 대신 Redis Pub/Sub으로 로더 완료를 즉시 통지받는 방식은 지연을 더 줄일 수 있는 추가 개선안으로 논의만 하고 보류했습니다.

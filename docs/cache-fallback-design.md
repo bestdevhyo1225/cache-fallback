@@ -43,21 +43,27 @@ Redis Error/Timeout/Circuit Open
 
 **How to apply:** 다음 세션에서 이 프로젝트 작업을 재개할 때, 이 단계 순서를 따라 진행 상황을 확인하고 이어서 구현.
 
-## 현재 진행 상태 (2026-07-14 기준)
+## 현재 진행 상태 (2026-07-19 기준)
 
 - Spring Boot 4.1.0 + Java 25 toolchain으로 `./gradlew clean build` 성공
-- `resilience4j-spring-boot3` 의존성은 Boot 4와 미호환이라 제거함 (Boot 3 전용 스타터, Boot 4용 버전 아직 미확정). Circuit breaker 단계(9단계)에서 다음 중 택1 재검토 필요: Boot 4 호환 Resilience4j 버전 확인 / resilience4j-circuitbreaker 코어 모듈만 사용 / Boot 3.x로 다운그레이드
-- **1~7단계 구현 완료.** 구현된 클래스:
+- **1~10단계 구현 완료.** 구현된 클래스:
   - `domain/PropertyData`, `repository/PropertyRepository`, `config/RedisConfig`, `controller/PropertyController` — 1단계 뼈대
   - `cache/CacheResult` — sealed interface(`Hit`/`Miss`/`Error`), Java 25 switch 패턴 매칭으로 소비 (2단계)
-  - `cache/RedisPropertyCache` — `get()`이 `CacheResult<PropertyData>` 반환, `put()`은 TTL 5분
+  - `cache/RedisPropertyCache` — `get()`/`put()` 모두 `@CircuitBreaker(name = "redisCache")` 적용, `put()`은 TTL 5분
   - `cache/LocalPropertyCache` — Caffeine, TTL 30분, `Optional` 반환 (에러 개념 없어서 CacheResult 미적용)
   - `lock/RedisDistributedLock` — `StringRedisTemplate` + `SET NX PX`(토큰) 획득, Lua 스크립트로 compare-and-delete 해제 (7단계, Redisson 대신 직접 구현 선택)
   - `service/PropertyService` — Hit(Local put 후 응답) / Miss(분산락 시도 → 성공시 DB조회+Redis set+Local put, 실패시 대기 후 폴백) / Error(Local get, hit면 stale 응답, miss면 DB조회 후 Local put만) 3-way 분기. DB 조회는 `ConcurrentHashMap<Long, CompletableFuture<PropertyData>>` 기반 인스턴스 내 single-flight(`fetchFromDbSingleFlight`)로 감쌈 (6단계)
-- **7단계의 알려진 한계 (의도적으로 보류, 실측만 8단계에서 완료, 수치 튜닝은 미착수):** `waitForOtherLoaderOrFallback`의 재시도 창(5회×100ms=500ms)이 락 TTL(3초)보다 훨씬 짧음. 또한 `dbLoadFutures` single-flight가 인스턴스 로컬이라 인스턴스가 여러 대일 때 크로스 인스턴스 방어가 안 됨. 결과적으로 락 홀더가 느릴 때(부하가 몰릴 때일수록) 대기 스레드들이 재시도를 다 소진하고 각자 `fetchFromDbSingleFlight`로 폴백 → 인스턴스 수만큼 DB 동시 조회가 날 수 있음. 락 홀더가 죽은 경우엔 오히려 짧은 재시도 창이 안전망 역할을 하므로 트레이드오프 있음.
+  - `config/CircuitBreakerStateLogger` — `redisCache` circuit breaker의 상태 전이를 WARN 로그로 기록 (9단계)
 - **8단계 완료 (락 경합 중 stale 응답 검증).** 로컬 Redis 컨테이너(`docker run -d --name redis-cache-fallback -p 6379:6379 redis:7`, localhost:6379)를 띄우고 `src/test/java/.../service/PropertyServiceLockContentionTest.java`에 3개 시나리오를 결정론적으로 재현하는 통합 테스트 작성, 전부 통과:
   - 락 경합 + Local hit → DB를 건드리지 않고 stale 값 즉시 반환 (Local TTL > Redis TTL 설계 의도 실측 확인)
-  - 락 경합 + Local miss → 재시도 창(500ms) 안에 다른 로더가 채운 Redis 값을 폴링으로 잡아채고 DB 미접근
-  - 재시도 창 소진 → DB로 폴백하되 Redis는 채우지 않음 (7단계 한계가 실측으로도 재현됨, 수치 튜닝은 여전히 미해결 상태로 남겨둠)
+  - 락 경합 + Local miss → 재시도 창 안에 다른 로더가 채운 Redis 값을 폴링으로 잡아채고 DB 미접근
+  - 재시도 창 소진 → DB로 폴백하되 Redis는 채우지 않음
   - 테스트는 테스트 스레드가 직접 `RedisDistributedLock.tryLock`으로 같은 락 키를 선점해 경합을 인위적으로 재현하는 방식(실 스레드 레이스에 의존하지 않음)
-- 다음 실제 구현 착수 지점: **9단계** — Circuit Breaker 추가 (Closed/Open/Half-open). 착수 전에 Boot 4 호환 Resilience4j 버전 확인 필요 (위 항목 참고)
+- **9단계 완료 (Circuit Breaker).** `resilience4j-spring-boot4`를 `2.4.0`으로 명시적 버전 pin (Spring Boot 4 지원이 2.4.0에서 추가됐지만 resilience4j 자체 BOM 파일에서 해당 아티팩트가 누락된 버그가 있어 BOM에 못 맡김). `RedisPropertyCache.get()`의 기존 내부 try/catch를 제거해야만 서킷 브레이커가 실패를 실제로 카운트한다는 게 핵심 — fallbackMethod가 실제 Redis 예외와 Open 상태의 `CallNotPermittedException`을 동일하게 `CacheResult.Error`/no-op으로 흡수. `application.yml`에서 `sliding-window-size: 10`만 넣고 `minimum-number-of-calls`를 빼먹으면 기본값 100 때문에 실패율 평가가 절대 발동하지 않는 함정이 있어 `minimum-number-of-calls: 10`으로 명시. 실제 Redis 컨테이너를 `docker stop/start`로 끊었다 살리며 Closed→Open→Half-open→Closed 전 구간을 실측 검증.
+- **10단계 완료 (종합 통합 테스트).** `PropertyServiceBasicPathsTest`(Redis Hit/Miss/Error x Local hit/miss 4개 기본 분기), `PropertyServiceConcurrencyTest`(동일 key 100 스레드 동시 요청 시 DB 1회만 호출, 서로 다른 key 100개 동시 miss, 락 경합 중 50 스레드 동시 요청 시 전부 stale 반환+DB 미접근) 추가. 테스트 작성 중 실제 버그 2개 발견: 스레드풀 크기가 스레드 수보다 작아 생기는 기아 데드락, 그리고 **Redis는 실제 외부 프로세스라 테스트 실행 사이에 초기화가 안 되는데 H2는 매 JVM마다 id가 1부터 다시 시작**해서 이전 실행의 leftover Redis 값과 새 id가 우연히 겹치는 flaky 버그 (8단계 테스트에도 같은 문제가 있어 `redisTemplate.delete`로 방어 추가).
+- **락 재시도 창을 TTL 기반으로 확장 (10단계 이후 개선).** 7단계의 알려진 한계(재시도 창 500ms ≪ 락 TTL 3초)를 실제로 고침:
+  - 고정 재시도 횟수 상수를 없애고 `LOCK_WAIT_BUDGET = LOCK_TTL - 재시도간격×2`(≈2.8초)로 TTL에서 유도 - TTL을 바꾸면 대기 예산도 같이 따라와서 둘이 다시 어긋나지 않음
+  - 락 획득→DB조회→Redis set→Local put→unlock 로직을 `attemptLockedLoad`로 추출해 최초 시도와 대기 루프 재시도가 공유
+  - `waitForOtherLoaderOrFallback`이 매 폴링마다 Redis 값 확인 + 직접 락 재획득 시도를 함께 반복 → 홀더가 살아있는 동안엔 인스턴스 수와 무관하게 DB가 1번만 조회되고, 홀더가 진짜 죽어 TTL이 만료된 경우에만 최종 DB 폴백
+  - 트레이드오프: 최악의 지연이 500ms→~2.8초로 늘어남. Pub/Sub 기반 이벤트 알림(폴링 제거)은 논의만 하고 별도 개선안으로 보류
+- 다음 실제 구현 착수 지점 없음 — 10단계 계획 전체 완료. 이후 방향은 다음 세션에서 새로 정함.

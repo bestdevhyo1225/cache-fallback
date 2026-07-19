@@ -40,11 +40,11 @@ docker compose up -d
 ./gradlew bootRun
 ```
 
-`GET /properties/{id}`로 조회할 수 있습니다.
+`GET /properties/{id}`로 조회할 수 있습니다. 존재하지 않는 id는 `PropertyNotFoundException` → `ApiExceptionHandler`를 거쳐 404로 응답합니다.
 
 ## 테스트
 
-일부 통합 테스트는 위 Redis 컨테이너가 떠 있어야 하고, 그중 일부(`RedisCircuitBreakerFailureTest`)는 `docker stop/start`로 컨테이너를 직접 제어합니다.
+일부 통합 테스트는 위 Redis 컨테이너가 떠 있어야 하고, 그중 일부(`RedisCircuitBreakerFailureTest`)는 `docker stop/start`로 컨테이너를 직접 제어합니다. `PropertyControllerAcceptanceTest`는 `MockMvc`로 실제 `GET /properties/{id}`를 호출해서 Hit/Miss/락 경합/Circuit Open/404/400까지 블랙박스로 검증하는 인수 테스트입니다.
 
 ```bash
 ./gradlew test

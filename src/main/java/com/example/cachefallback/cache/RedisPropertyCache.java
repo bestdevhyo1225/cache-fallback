@@ -1,6 +1,7 @@
 package com.example.cachefallback.cache;
 
 import com.example.cachefallback.domain.PropertyData;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.time.Duration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -17,19 +18,24 @@ public class RedisPropertyCache {
     this.redisTemplate = redisTemplate;
   }
 
+  @CircuitBreaker(name = "redisCache", fallbackMethod = "getFallback")
   public CacheResult<PropertyData> get(Long id) {
-    try {
-      PropertyData data = redisTemplate.opsForValue().get(KEY_PREFIX + id);
-      if (data == null) {
-        return new CacheResult.Miss<>();
-      }
-      return new CacheResult.Hit<>(data);
-    } catch (Exception e) {
-      return new CacheResult.Error<>(e);
+    PropertyData data = redisTemplate.opsForValue().get(KEY_PREFIX + id);
+    if (data == null) {
+      return new CacheResult.Miss<>();
     }
+    return new CacheResult.Hit<>(data);
   }
 
+  private CacheResult<PropertyData> getFallback(Long id, Throwable t) {
+    return new CacheResult.Error<>(t);
+  }
+
+  @CircuitBreaker(name = "redisCache", fallbackMethod = "putFallback")
   public void put(Long id, PropertyData data) {
     redisTemplate.opsForValue().set(KEY_PREFIX + id, data, TTL);
+  }
+
+  private void putFallback(Long id, PropertyData data, Throwable t) {
   }
 }

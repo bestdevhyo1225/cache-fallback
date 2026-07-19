@@ -15,3 +15,13 @@ spring:
   h2:
     console:
       enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      redisCache:
+        sliding-window-size: 10
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 2
